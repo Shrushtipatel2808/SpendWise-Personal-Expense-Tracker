@@ -9,60 +9,94 @@ const categoryInput = document.getElementById("category");
 const typeInput = document.getElementById("type");
 const dateInput = document.getElementById("date");
 
-const transactionList = document.getElementById("transactionList");
-
 const totalBalance = document.getElementById("totalBalance");
 const totalIncome = document.getElementById("totalIncome");
 const totalExpenses = document.getElementById("totalExpenses");
 
+const transactionList = document.getElementById("transactionList");
+const transactionCount = document.getElementById("transactionCount");
+
 const searchInput = document.getElementById("searchInput");
 const filterType = document.getElementById("filterType");
 
-const transactionCount = document.getElementById("transactionCount");
+const currentDate = document.getElementById("currentDate");
+const monthlyChart = document.getElementById("monthlyChart");
+const insightText = document.getElementById("insightText");
 
 
-// GET SAVED TRANSACTIONS
+// LOAD SAVED TRANSACTIONS
 
-let transactions = JSON.parse(localStorage.getItem("transactions")) || [];
+let transactions = [];
+
+try {
+    transactions = JSON.parse(localStorage.getItem("transactions")) || [];
+
+    if (!Array.isArray(transactions)) {
+        transactions = [];
+    }
+} catch (error) {
+    transactions = [];
+}
 
 
 // SET TODAY'S DATE
 
-const today = new Date();
+function getTodayDate() {
+    const today = new Date();
 
-dateInput.value = today.toISOString().split("T")[0];
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, "0");
+    const day = String(today.getDate()).padStart(2, "0");
 
-document.getElementById("currentDate").textContent =
-    today.toLocaleDateString("en-IN", {
-        day: "numeric",
-        month: "short",
-        year: "numeric"
-    });
+    return `${year}-${month}-${day}`;
+}
+
+dateInput.value = getTodayDate();
+
+currentDate.textContent = new Date().toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric"
+});
 
 
 // FORMAT AMOUNT
 
 function formatAmount(amount) {
-
-    return Number(amount).toLocaleString("en-IN", {
+    return new Intl.NumberFormat("en-IN", {
         style: "currency",
         currency: "INR",
-        minimumFractionDigits: 2
-    });
-
+        maximumFractionDigits: 2
+    }).format(amount);
 }
 
 
-// SAVE DATA IN LOCAL STORAGE
+// SAVE DATA
 
 function saveTransactions() {
-
     localStorage.setItem("transactions", JSON.stringify(transactions));
-
 }
 
 
-// UPDATE DASHBOARD CARDS
+// CATEGORY ICONS
+
+function getCategoryIcon(category) {
+    const icons = {
+        Food: "🍔",
+        Shopping: "🛍️",
+        Travel: "🚕",
+        Bills: "🧾",
+        Salary: "💼",
+        Education: "📚",
+        Health: "💊",
+        Other: "📌"
+    };
+
+    return icons[category] || "📌";
+}
+
+
+// UPDATE SUMMARY CARDS
 
 function updateSummary() {
 
@@ -72,128 +106,133 @@ function updateSummary() {
     transactions.forEach(function(transaction) {
 
         if (transaction.type === "income") {
-
             income += transaction.amount;
-
         } else {
-
             expenses += transaction.amount;
-
         }
 
     });
 
-    let balance = income - expenses;
+    const balance = income - expenses;
 
+    totalBalance.textContent = formatAmount(balance);
     totalIncome.textContent = formatAmount(income);
     totalExpenses.textContent = formatAmount(expenses);
-    totalBalance.textContent = formatAmount(balance);
 
+    updateInsight(income, expenses);
 }
 
 
-// SHOW TRANSACTIONS
+// UPDATE QUICK INSIGHT
+
+function updateInsight(income, expenses) {
+
+    if (transactions.length === 0) {
+        insightText.textContent =
+            "Start adding transactions to understand your spending habits.";
+    } else if (expenses === 0) {
+        insightText.textContent =
+            "Great start! You haven't recorded any expenses yet.";
+    } else if (income >= expenses) {
+        insightText.textContent =
+            "Your recorded income is higher than your expenses. Keep managing your money wisely!";
+    } else {
+        insightText.textContent =
+            "Your recorded expenses are higher than your income. Review your spending and plan ahead.";
+    }
+}
+
+
+// DISPLAY TRANSACTIONS
 
 function displayTransactions() {
 
     transactionList.innerHTML = "";
 
-    let searchText = searchInput.value.toLowerCase();
-    let selectedType = filterType.value;
+    const searchValue = searchInput.value.toLowerCase().trim();
+    const selectedType = filterType.value;
 
-    let filteredTransactions = transactions.filter(function(transaction) {
+    const filteredTransactions = transactions.filter(function(transaction) {
 
-        let matchesSearch =
-            transaction.title.toLowerCase().includes(searchText) ||
-            transaction.category.toLowerCase().includes(searchText);
+        const matchesSearch =
+            transaction.title.toLowerCase().includes(searchValue) ||
+            transaction.category.toLowerCase().includes(searchValue);
 
-        let matchesType =
-            selectedType === "all" || transaction.type === selectedType;
+        const matchesType =
+            selectedType === "all" ||
+            transaction.type === selectedType;
 
         return matchesSearch && matchesType;
 
     });
 
-
     transactionCount.textContent =
-        filteredTransactions.length +
-        (filteredTransactions.length === 1 ? " Transaction" : " Transactions");
+        `${filteredTransactions.length} Transactions`;
 
 
     if (filteredTransactions.length === 0) {
 
-        transactionList.innerHTML = `
-            <p class="empty_message">
-                No transactions found.
-            </p>
-        `;
+        const emptyMessage = document.createElement("p");
+
+        emptyMessage.className = "empty_message";
+        emptyMessage.textContent = transactions.length === 0
+            ? "No transactions yet. Add your first transaction!"
+            : "No matching transactions found.";
+
+        transactionList.appendChild(emptyMessage);
 
         return;
-
     }
 
 
-    filteredTransactions.forEach(function(transaction) {
+    // SHOW LATEST TRANSACTIONS FIRST
 
-        const transactionItem = document.createElement("div");
-
-        transactionItem.className = "transaction_item";
-
-
-        const transactionInfo = document.createElement("div");
-
-        transactionInfo.className = "transaction_info";
+    const sortedTransactions = [...filteredTransactions].sort(function(a, b) {
+        return b.id - a.id;
+    });
 
 
-        const transactionTitle = document.createElement("h3");
+    sortedTransactions.forEach(function(transaction) {
 
-        const transactionDate = document.createElement("p");
+        const row = document.createElement("div");
+        row.className = "transaction_row";
 
+        const left = document.createElement("div");
+        left.className = "transaction_left";
 
-        const categoryIcons = {
-            Food: "🍔",
-            Shopping: "🛍️",
-            Travel: "🚗",
-            Bills: "🧾",
-            Salary: "💼",
-            Education: "📚",
-            Health: "💊",
-            Other: "📌"
-        };
+        const icon = document.createElement("div");
+        icon.className = "transaction_icon";
+        icon.textContent = getCategoryIcon(transaction.category);
 
+        const info = document.createElement("div");
+        info.className = "transaction_info";
 
-        transactionTitle.textContent =
-            (categoryIcons[transaction.category] || "📌") +
-            " " + transaction.title;
+        const name = document.createElement("h4");
+        name.textContent = transaction.title;
 
+        const details = document.createElement("p");
+        details.textContent =
+            `${transaction.category} • ${transaction.date}`;
 
-        const date = new Date(transaction.date + "T00:00:00");
+        info.appendChild(name);
+        info.appendChild(details);
 
-        transactionDate.textContent =
-            date.toLocaleDateString("en-IN", {
-                day: "numeric",
-                month: "short",
-                year: "numeric"
-            }) + " • " + transaction.category;
+        left.appendChild(icon);
+        left.appendChild(info);
 
 
-        transactionInfo.appendChild(transactionTitle);
-        transactionInfo.appendChild(transactionDate);
+        const right = document.createElement("div");
+        right.className = "transaction_right";
 
+        const amount = document.createElement("span");
 
-        const transactionAmount = document.createElement("h3");
+        amount.className = transaction.type === "income"
+            ? "transaction_amount income_text"
+            : "transaction_amount expense_text";
 
-        if (transaction.type === "income") {
+        const sign = transaction.type === "income" ? "+" : "-";
 
-            transactionAmount.className = "income_amount";
-            transactionAmount.textContent = "+ " + formatAmount(transaction.amount);
-
-        } else {
-
-            transactionAmount.className = "expense_amount";
-            transactionAmount.textContent = "- " + formatAmount(transaction.amount);
-
-        }
+        amount.textContent = `${sign} ${formatAmount(transaction.amount)}`;
 
 
         const deleteButton = document.createElement("button");
@@ -202,24 +241,24 @@ function displayTransactions() {
         deleteButton.textContent = "Delete";
 
         deleteButton.addEventListener("click", function() {
-
             deleteTransaction(transaction.id);
-
         });
 
 
-        transactionItem.appendChild(transactionInfo);
-        transactionItem.appendChild(transactionAmount);
-        transactionItem.appendChild(deleteButton);
+        right.appendChild(amount);
+        right.appendChild(deleteButton);
 
-        transactionList.appendChild(transactionItem);
+        row.appendChild(left);
+        row.appendChild(right);
+
+        transactionList.appendChild(row);
 
     });
 
 }
 
 
-// ADD NEW TRANSACTION
+// ADD TRANSACTION
 
 transactionForm.addEventListener("submit", function(event) {
 
@@ -231,45 +270,31 @@ transactionForm.addEventListener("submit", function(event) {
     const type = typeInput.value;
     const date = dateInput.value;
 
-
-    if (!title || amount <= 0 || !category || !date) {
-
+    if (!title || !category || !date || !Number.isFinite(amount) || amount <= 0) {
         alert("Please enter valid transaction details.");
-
         return;
-
     }
 
-
     const newTransaction = {
-
         id: Date.now(),
-
         title: title,
-
         amount: amount,
-
         category: category,
-
         type: type,
-
         date: date
-
     };
 
-
-    transactions.unshift(newTransaction);
+    transactions.push(newTransaction);
 
     saveTransactions();
 
     updateSummary();
-
     displayTransactions();
-
+    updateMonthlyChart();
 
     transactionForm.reset();
 
-    dateInput.value = today.toISOString().split("T")[0];
+    dateInput.value = getTodayDate();
 
 });
 
@@ -283,24 +308,18 @@ function deleteTransaction(id) {
     );
 
     if (!confirmDelete) {
-
         return;
-
     }
 
-
     transactions = transactions.filter(function(transaction) {
-
         return transaction.id !== id;
-
     });
-
 
     saveTransactions();
 
     updateSummary();
-
     displayTransactions();
+    updateMonthlyChart();
 
 }
 
@@ -308,22 +327,121 @@ function deleteTransaction(id) {
 // SEARCH TRANSACTIONS
 
 searchInput.addEventListener("input", function() {
-
     displayTransactions();
-
 });
 
 
 // FILTER TRANSACTIONS
 
 filterType.addEventListener("change", function() {
-
     displayTransactions();
-
 });
 
 
-// NAVIGATION ACTIVE LINK
+// MONTHLY EXPENSE CHART
+
+function updateMonthlyChart() {
+
+    monthlyChart.innerHTML = "";
+
+    const today = new Date();
+
+    const months = [];
+
+    // LAST SIX MONTHS INCLUDING CURRENT MONTH
+
+    for (let i = 5; i >= 0; i--) {
+
+        const date = new Date(
+            today.getFullYear(),
+            today.getMonth() - i,
+            1
+        );
+
+        months.push({
+            month: date.getMonth(),
+            year: date.getFullYear(),
+            label: date.toLocaleDateString("en-IN", {
+                month: "short"
+            }),
+            total: 0
+        });
+
+    }
+
+
+    // CALCULATE MONTHLY EXPENSES
+
+    transactions.forEach(function(transaction) {
+
+        if (transaction.type !== "expense") {
+            return;
+        }
+
+        const transactionDate = new Date(transaction.date + "T00:00:00");
+
+        const monthData = months.find(function(item) {
+            return item.month === transactionDate.getMonth() &&
+                item.year === transactionDate.getFullYear();
+        });
+
+        if (monthData) {
+            monthData.total += transaction.amount;
+        }
+
+    });
+
+
+    const highestExpense = Math.max(
+        ...months.map(function(item) {
+            return item.total;
+        })
+    );
+
+
+    if (highestExpense === 0) {
+
+        const empty = document.createElement("p");
+        empty.className = "chart_empty";
+        empty.textContent = "Add expenses to see your monthly chart.";
+
+        monthlyChart.appendChild(empty);
+
+        return;
+    }
+
+
+    // CREATE CHART BARS
+
+    months.forEach(function(item) {
+
+        const barItem = document.createElement("div");
+        barItem.className = "bar_item";
+
+        const bar = document.createElement("div");
+        bar.className = "bar";
+
+        const height = item.total === 0
+            ? 4
+            : Math.max((item.total / highestExpense) * 145, 8);
+
+        bar.style.height = `${height}px`;
+        bar.title = formatAmount(item.total);
+
+        const label = document.createElement("span");
+        label.textContent = item.label;
+
+        barItem.appendChild(bar);
+        barItem.appendChild(label);
+
+        monthlyChart.appendChild(barItem);
+
+    });
+
+}
+
+
+// SIDEBAR NAVIGATION
 
 const navLinks = document.querySelectorAll(".nav_link");
 
@@ -332,9 +450,7 @@ navLinks.forEach(function(link) {
     link.addEventListener("click", function() {
 
         navLinks.forEach(function(item) {
-
             item.classList.remove("active");
-
         });
 
         link.classList.add("active");
@@ -344,8 +460,8 @@ navLinks.forEach(function(link) {
 });
 
 
-// INITIAL DASHBOARD LOAD
+// INITIAL PAGE LOAD
 
 updateSummary();
-
 displayTransactions();
+updateMonthlyChart();
